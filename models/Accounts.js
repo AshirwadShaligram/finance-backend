@@ -16,6 +16,13 @@ const AccountSchema = new mongoose.Schema(
       required: true,
       default: 0,
     },
+    currentBalance: {
+      type: Number,
+      required: true,
+      default: function () {
+        return this.balance; // Initialize currentBalance to same as balance
+      },
+    },
     color: {
       type: String,
       required: true,

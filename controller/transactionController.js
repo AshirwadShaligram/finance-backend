@@ -28,17 +28,22 @@ export const createTransaction = asyncHandler(async (req, res) => {
     account,
   });
 
-  // Update account balance
+  // Update account current balance
   const accountToUpdate = await Account.findById(account);
   if (!accountToUpdate) {
     res.status(404);
     throw new Error("Account not found");
   }
 
+  // Initialize currentBalance if it doesn't exist
+  if (accountToUpdate.currentBalance === undefined) {
+    accountToUpdate.currentBalance = accountToUpdate.balance;
+  }
+
   if (type === "income") {
-    accountToUpdate.balance += amount;
-  } else {
-    accountToUpdate.balance -= amount;
+    accountToUpdate.currentBalance += amount;
+  } else if (type === "expense") {
+    accountToUpdate.currentBalance -= amount;
   }
 
   await accountToUpdate.save();
@@ -55,18 +60,23 @@ export const updateTransaction = asyncHandler(async (req, res) => {
   const transaction = await Transaction.findById(req.params.id);
 
   if (transaction && transaction.user.toString() === req.user._id.toString()) {
-    // First, revert the old transaction's effect on the account
+    // First, revert the old transaction's effect on the old account
     const oldAccount = await Account.findById(transaction.account);
     if (oldAccount) {
+      // Initialize currentBalance if it doesn't exist
+      if (oldAccount.currentBalance === undefined) {
+        oldAccount.currentBalance = oldAccount.balance;
+      }
+
       if (transaction.type === "income") {
-        oldAccount.balance -= transaction.amount;
-      } else {
-        oldAccount.balance += transaction.amount;
+        oldAccount.currentBalance -= transaction.amount;
+      } else if (transaction.type === "expense") {
+        oldAccount.currentBalance += transaction.amount;
       }
       await oldAccount.save();
     }
 
-    // Update transaction
+    // Update transaction fields
     transaction.amount = amount || transaction.amount;
     transaction.description = description || transaction.description;
     transaction.date = date || transaction.date;
@@ -74,13 +84,18 @@ export const updateTransaction = asyncHandler(async (req, res) => {
     transaction.category = category || transaction.category;
     transaction.account = account || transaction.account;
 
-    // Apply new transaction's effect on the account
+    // Apply new transaction's effect on the new account (could be same or different)
     const newAccount = await Account.findById(transaction.account);
     if (newAccount) {
+      // Initialize currentBalance if it doesn't exist
+      if (newAccount.currentBalance === undefined) {
+        newAccount.currentBalance = newAccount.balance;
+      }
+
       if (transaction.type === "income") {
-        newAccount.balance += transaction.amount;
-      } else {
-        newAccount.balance -= transaction.amount;
+        newAccount.currentBalance += transaction.amount;
+      } else if (transaction.type === "expense") {
+        newAccount.currentBalance -= transaction.amount;
       }
       await newAccount.save();
     }
@@ -103,15 +118,20 @@ export const deleteTransaction = asyncHandler(async (req, res) => {
     // Revert the transaction's effect on the account
     const account = await Account.findById(transaction.account);
     if (account) {
+      // Initialize currentBalance if it doesn't exist
+      if (account.currentBalance === undefined) {
+        account.currentBalance = account.balance;
+      }
+
       if (transaction.type === "income") {
-        account.balance -= transaction.amount;
-      } else {
-        account.balance += transaction.amount;
+        account.currentBalance -= transaction.amount;
+      } else if (transaction.type === "expense") {
+        account.currentBalance += transaction.amount;
       }
       await account.save();
     }
 
-    await transaction.remove();
+    await transaction.deleteOne();
     res.json({ message: "Transaction removed" });
   } else {
     res.status(404);
@@ -124,6 +144,7 @@ export const deleteTransaction = asyncHandler(async (req, res) => {
 // @access  Private
 export const getFinancialSummary = asyncHandler(async (req, res) => {
   const transactions = await Transaction.find({ user: req.user._id });
+  const accounts = await Account.find({ user: req.user._id });
 
   const totalIncome = transactions
     .filter((t) => t.type === "income")
@@ -133,11 +154,30 @@ export const getFinancialSummary = asyncHandler(async (req, res) => {
     .filter((t) => t.type === "expense")
     .reduce((sum, t) => sum + t.amount, 0);
 
-  const netBalance = totalIncome - totalExpense;
+  // Total initial balance across all accounts
+  const totalInitialBalance = accounts.reduce((sum, a) => sum + a.balance, 0);
+
+  // Net balance is simply the sum of all current account balances
+  const netBalance = accounts.reduce((sum, a) => {
+    const currentBalance =
+      a.currentBalance !== undefined ? a.currentBalance : a.balance;
+    return sum + currentBalance;
+  }, 0);
 
   res.json({
     totalIncome,
     totalExpense,
-    netBalance,
+    netBalance, // This is the sum of all current account balances
+    totalInitialBalance,
+    accounts: accounts.map((account) => ({
+      id: account._id,
+      name: account.name,
+      initialBalance: account.balance,
+      currentBalance:
+        account.currentBalance !== undefined
+          ? account.currentBalance
+          : account.balance,
+      color: account.color,
+    })),
   });
 });

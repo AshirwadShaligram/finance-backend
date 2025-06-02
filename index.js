@@ -9,6 +9,7 @@ import authRoute from "./routes/authRoute.js";
 import accountRoute from "./routes/accountRoute.js";
 import categoryRoute from "./routes/categoryRoute.js";
 import transactionRoute from "./routes/transactionRoute.js";
+import emailRoute from "./routes/emailRoute.js";
 
 // Load env vars
 dotenv.config();
@@ -37,6 +38,7 @@ app.use("/api/auth", authRoute);
 app.use("/api/accounts", accountRoute);
 app.use("/api/categories", categoryRoute);
 app.use("/api/transactions", transactionRoute);
+app.use("/api/email", emailRoute);
 
 // Basic route
 app.get("/", (req, res) => {

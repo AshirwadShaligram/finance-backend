@@ -13,10 +13,10 @@ router
   .route("/")
   .get(protect, getTransactions)
   .post(protect, createTransaction);
+router.get("/summary", protect, getFinancialSummary);
 router
   .route("/:id")
   .put(protect, updateTransaction)
   .delete(protect, deleteTransaction);
-router.get("/summary", protect, getFinancialSummary);
 
 export default router;
